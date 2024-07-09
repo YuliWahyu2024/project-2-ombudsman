@@ -59,7 +59,7 @@ def process_entry(entry):
 @app.command()
 def get_metadata(
      keyword: str = typer.Option(None, help="Keyword to search for"),
-    from_: str = typer.Option(None, "--from", help="The start date for the search"),
+    from_: str = typer.Option("2023-01-01", "--from", help="The start date for the search"),
     to: str = typer.Option(None, help="The end date for the search"),
     upheld: bool = typer.Option(None, help="Filter by whether the decision was upheld"),
     industry_sector: str = typer.Option(
@@ -68,7 +68,7 @@ def get_metadata(
 ):
     # Calculate vales for the default parameters
     today = datetime.date.today()
-    from_ = datetime.datetime.strptime(from_, "%Y-%m-%d") if from_ else today - datetime.timedelta(days=90)
+    from_ = datetime.datetime.strptime(from_, "%Y-%m-%d") if from_ else today - datetime.timedelta(days=50)
     to = datetime.datetime.strptime(to, "%Y-%m-%d") if to else today
     industry_sectors = industry_sector.split(",") if industry_sector else list(INDUSTRY_SECTOR_MAPPING.keys())
 
@@ -122,17 +122,32 @@ def get_metadata(
             writer.writerows(metadata_entries)
 
 
+def format_date(date_str):
+    """
+    Format the date string from 'DD MMM YYYY' to 'MM_YY'.
+    """
+    date_parts = date_str.split(" ")
+    month_map = {
+        "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04",
+        "May": "05", "Jun": "06", "Jul": "07", "Aug": "08",
+        "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"
+    }
+    month = month_map[date_parts[1]]
+    year = date_parts[2][2:]  # Get last two digits of the year
+    return f"{month}_{year}"
+
 @app.command()
 def download_decisions(
     metadata_file: Path = typer.Argument("metadata.csv", help="The path to the metadata file"),
-    output_dir: Path = typer.Argument("decisions", help="The path to the output directory"),
+    output_dir: Path = typer.Argument("docfile", help="The path to the output directory"),
 ):
     output_dir.mkdir(exist_ok=True)
 
     with open(metadata_file) as f:
         reader = csv.DictReader(f)
         for row in reader:
-            output_file = output_dir / f"{row['decision_id']}.pdf"
+            formatted_date = format_date(row['date'])
+            output_file = output_dir / f"{formatted_date}_{row['tag']}_{row['decision_id']}.pdf"
             if output_file.exists():
                 typer.echo(f"Skipping {output_file} as it already exists")
                 continue
@@ -140,7 +155,7 @@ def download_decisions(
             time.sleep(1)
             decision_url = BASE_DECISIONS_URL + row["location"]
             urllib.request.urlretrieve(decision_url, output_file)
-
+            typer.echo(f"Downloaded {output_file}")
 
 if __name__ == "__main__":
     app()
